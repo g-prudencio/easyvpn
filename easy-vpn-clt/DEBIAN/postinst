@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+
+# FIX: wrap in || true so a PATH timing issue during dpkg unpack
+# doesn't abort the entire install (set -e is active).
+easy-vpn version || true

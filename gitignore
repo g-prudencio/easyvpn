@@ -1,0 +1,37 @@
+# ── Built package ────────────────────────────────────────────────────────────
+easy-vpn.deb
+
+# Gzipped man/changelog files created by build_and_install_easyVPN.sh
+# (the build script compresses these in-place; they should not be committed
+#  in their compressed state or the next build will try to gzip them again)
+easy-vpn-clt/usr/share/man/man8/easy-vpn.8.gz
+easy-vpn-clt/usr/share/doc/easy-vpn/changelog.gz
+
+# ── Secrets — never commit these ─────────────────────────────────────────────
+.env
+easy-vpn-web/.env
+# The live env file written by easy-vpn configure env
+easy-vpn-clt/opt/easy-vpn/server/easy-vpn.env
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+easy-vpn-web/.dockerignore
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

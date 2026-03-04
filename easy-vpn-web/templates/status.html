@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Status{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Certificate Status</h1>
+  <p>// Audit expired and unused client certificates</p>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Expired Certificates</div>
+    <p class="text-muted font-mono" style="font-size:0.75rem;margin-bottom:16px">
+      Certificates past their expiry date will be flagged.
+    </p>
+    <button class="btn btn-primary" onclick="checkExpired()">
+      <span id="exp-btn">Scan for Expired</span>
+    </button>
+    <div id="exp-output" class="code-block mt-4" style="display:none"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Unused Certificates</div>
+    <p class="text-muted font-mono" style="font-size:0.75rem;margin-bottom:16px">
+      Clients inactive for 90+ days are flagged. 180+ days can be auto-revoked.
+    </p>
+    <div class="flex gap-2 mb-4">
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:0.78rem;cursor:pointer">
+        <input type="checkbox" id="auto-revoke" style="width:auto;margin:0" />
+        Auto-revoke at 180 days
+      </label>
+    </div>
+    <button class="btn btn-ghost" onclick="checkUnused()">
+      <span id="unused-btn">Scan for Unused</span>
+    </button>
+    <div id="unused-output" class="code-block mt-4" style="display:none"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">OpenVPN Service</div>
+  <div class="flex gap-3 items-center" style="margin-bottom:12px">
+    <span id="svc-badge"><span class="badge badge-yellow">Checking…</span></span>
+    <button class="btn btn-ghost btn-sm" onclick="refreshSvc()">↺ Refresh</button>
+  </div>
+  <p class="text-muted font-mono" style="font-size:0.72rem">
+    Service: <code>openvpn-server@server.service</code>
+  </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function checkExpired() {
+    const btn = document.getElementById('exp-btn');
+    const out = document.getElementById('exp-output');
+    btn.innerHTML = '<span class="spinner"></span> Scanning…';
+    const r = await fetch('/api/status/expired');
+    const d = await r.json();
+    out.style.display = 'block';
+    out.textContent = d.stdout || d.stderr || 'No output';
+    btn.textContent = 'Scan for Expired';
+  }
+
+  async function checkUnused() {
+    const btn = document.getElementById('unused-btn');
+    const out = document.getElementById('unused-output');
+    const auto = document.getElementById('auto-revoke').checked ? 'true' : 'false';
+    btn.innerHTML = '<span class="spinner"></span> Scanning…';
+    const r = await fetch(`/api/status/unused?auto_revoke=${auto}`);
+    const d = await r.json();
+    out.style.display = 'block';
+    out.textContent = d.stdout || d.stderr || 'No output';
+    btn.textContent = 'Scan for Unused';
+  }
+
+  async function refreshSvc() {
+    const el = document.getElementById('svc-badge');
+    el.innerHTML = '<span class="spinner"></span>';
+    const r = await fetch('/api/openvpn/running');
+    const d = await r.json();
+    el.innerHTML = d.active
+      ? '<span class="badge badge-green"><span class="dot"></span>Active</span>'
+      : '<span class="badge badge-red"><span class="dot"></span>Inactive</span>';
+  }
+  refreshSvc();
+</script>
+{% endblock %}

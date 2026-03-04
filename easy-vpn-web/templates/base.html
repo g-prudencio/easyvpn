@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}EasyVPN{% endblock %} — EasyVPN Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0d11;
+      --surface:   #13161d;
+      --border:    #1e2230;
+      --border2:   #2a2f42;
+      --green:     #00ffa3;
+      --green-dim: #00ffa320;
+      --red:       #ff4d6d;
+      --red-dim:   #ff4d6d22;
+      --yellow:    #ffd166;
+      --blue:      #4d94ff;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-sans: 'Syne', sans-serif;
+    }
+
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── Scanline overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.06) 2px,
+        rgba(0,0,0,0.06) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── Sidebar ── */
+    .layout { display: flex; min-height: 100vh; }
+
+    nav.sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+
+    .sidebar-logo {
+      padding: 28px 24px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo .wordmark {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+    .sidebar-logo .tagline {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-top: 2px;
+      letter-spacing: 0.08em;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 16px 0;
+      list-style: none;
+    }
+    .sidebar-nav li a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 24px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      transition: color 0.15s, background 0.15s;
+      border-left: 2px solid transparent;
+    }
+    .sidebar-nav li a:hover,
+    .sidebar-nav li a.active {
+      color: var(--green);
+      background: var(--green-dim);
+      border-left-color: var(--green);
+    }
+    .sidebar-nav li a .icon { font-size: 1rem; }
+
+    .sidebar-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+    }
+    .sidebar-footer a {
+      color: var(--red);
+      text-decoration: none;
+      display: block;
+      margin-top: 8px;
+      font-size: 0.7rem;
+    }
+    .sidebar-footer a:hover { text-decoration: underline; }
+
+    /* ── Main content ── */
+    main.content {
+      flex: 1;
+      padding: 40px 48px;
+      overflow-y: auto;
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      margin-bottom: 36px;
+    }
+    .page-header h1 {
+      font-size: 1.8rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .page-header p {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      margin-top: 6px;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Stats row ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .stat-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-box::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--green);
+    }
+    .stat-box.warn::before { background: var(--yellow); }
+    .stat-box.danger::before { background: var(--red); }
+    .stat-box .label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .stat-box .value {
+      font-family: var(--font-mono);
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--green);
+    }
+    .stat-box.warn .value { color: var(--yellow); }
+    .stat-box.danger .value { color: var(--red); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      border-radius: 5px;
+      font-family: var(--font-sans);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s, transform 0.1s;
+      text-decoration: none;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--green); color: #0b0d11; }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-danger  { background: var(--red); color: #fff; }
+    .btn-danger:hover { opacity: 0.85; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--text);
+    }
+    .btn-ghost:hover { border-color: var(--green); color: var(--green); }
+    .btn-sm { padding: 5px 12px; font-size: 0.7rem; }
+
+    /* ── Forms ── */
+    label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    input[type=text], input[type=password], select, textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      margin-bottom: 16px;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 0 2px var(--green-dim);
+    }
+    select option { background: var(--bg); }
+
+    /* ── Code / terminal blocks ── */
+    .code-block {
+      background: #090a0e;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      line-height: 1.7;
+      color: #a8b4c8;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .code-block .prompt { color: var(--green); user-select: none; }
+
+    /* ── Status badge ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .badge-green { background: var(--green-dim); color: var(--green); border: 1px solid var(--green)44; }
+    .badge-red   { background: var(--red-dim);   color: var(--red);   border: 1px solid var(--red)44; }
+    .badge-yellow { background: #ffd16622; color: var(--yellow); border: 1px solid var(--yellow)44; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* ── Alerts / flash ── */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      margin-bottom: 20px;
+      font-family: var(--font-mono);
+    }
+    .alert-error  { background: var(--red-dim); border: 1px solid var(--red)55; color: var(--red); }
+    .alert-warning{ background: #ffd16622; border: 1px solid var(--yellow)55; color: var(--yellow); }
+    .alert-success{ background: var(--green-dim); border: 1px solid var(--green)55; color: var(--green); }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 32px;
+      width: 100%;
+      max-width: 540px;
+      position: relative;
+    }
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 800;
+      margin-bottom: 20px;
+    }
+    .modal-close {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: none; border: none;
+      color: var(--muted); font-size: 1.2rem;
+      cursor: pointer;
+    }
+    .modal-close:hover { color: var(--text); }
+
+    /* ── Grid helpers ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .mt-4  { margin-top: 16px; }
+    .mt-8  { margin-top: 32px; }
+    .mb-4  { margin-bottom: 16px; }
+    .flex  { display: flex; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .text-muted { color: var(--muted); }
+    .text-green { color: var(--green); }
+    .text-red   { color: var(--red); }
+    .font-mono  { font-family: var(--font-mono); }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 14px 20px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      z-index: 10000;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: transform 0.25s, opacity 0.25s;
+      max-width: 360px;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.success { border-left: 3px solid var(--green); color: var(--green); }
+    #toast.error   { border-left: 3px solid var(--red);   color: var(--red); }
+
+    /* ── Loading spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="layout">
+  {% if session.get('authenticated') %}
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="wordmark">⬡ EasyVPN</div>
+      <div class="tagline">// VPN Management Console</div>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">
+        <span class="icon">◈</span> Dashboard
+      </a></li>
+      <li><a href="{{ url_for('configure') }}" class="{% if request.endpoint == 'configure' %}active{% endif %}">
+        <span class="icon">⚙</span> Configure
+      </a></li>
+      <li><a href="{{ url_for('clients') }}" class="{% if request.endpoint in ['clients','create_client','revoke_client'] %}active{% endif %}">
+        <span class="icon">◉</span> Clients
+      </a></li>
+      <li><a href="{{ url_for('status') }}" class="{% if request.endpoint == 'status' %}active{% endif %}">
+        <span class="icon">▦</span> Status
+      </a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <span id="vpn-status-indicator">Checking...</span>
+      <a href="{{ url_for('logout') }}">↩ Logout</a>
+    </div>
+  </nav>
+  {% endif %}
+
+  <main class="content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  function toast(msg, type='success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `show ${type}`;
+    setTimeout(() => t.className = '', 3000);
+  }
+
+  function openModal(id) { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+  // Update VPN service status in sidebar
+  async function checkVpnStatus() {
+    const el = document.getElementById('vpn-status-indicator');
+    if (!el) return;
+    try {
+      const r = await fetch('/api/openvpn/running');
+      const d = await r.json();
+      el.innerHTML = d.active
+        ? '<span class="badge badge-green"><span class="dot"></span>VPN Running</span>'
+        : '<span class="badge badge-red"><span class="dot"></span>VPN Stopped</span>';
+    } catch { el.textContent = 'Status unknown'; }
+  }
+  checkVpnStatus();
+  setInterval(checkVpnStatus, 15000);
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

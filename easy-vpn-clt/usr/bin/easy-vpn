@@ -1,0 +1,157 @@
+#!/bin/bash
+
+functionsDIR="/opt/easy-vpn/functions"
+
+for function in "$functionsDIR"/*; do
+	# shellcheck disable=SC1090
+	source "$function"
+done
+
+if [ -z "$1" ]; then
+	help
+	graceful_exit
+fi
+
+action=$1
+
+if [[ "$action" == "configure" ]]; then
+	subAction=$2
+	if [[ "$subAction" == "env" ]]; then
+		EASY_VPN_ISSUER=$3
+		EASY_VPN_AUTH_TYPE=$4
+		ORGANIZATION_NAME=$5
+		VPN_PUBLIC_IP=$6
+		configure_env "$EASY_VPN_ISSUER" "$EASY_VPN_AUTH_TYPE" "$ORGANIZATION_NAME" "$VPN_PUBLIC_IP"
+		graceful_exit
+	fi
+	if [[ "$subAction" == "server" ]]; then
+		configure_server
+		graceful_exit
+	fi
+	usage "configure"
+	loud_exit
+fi
+
+if [[ "$action" == "create" ]]; then
+	clientName=$2
+	GENERATE_OATH="false"
+	clientPassword="nopass"
+	if [[ -n "$3" ]]; then
+		GENERATE_OATH=$3
+	fi
+
+	if [[ -n "$4" ]]; then
+		clientPassword=$4
+	fi
+	create_client_cert "$clientName" "$GENERATE_OATH" "$clientPassword"
+	graceful_exit
+fi
+
+if [[ "$action" == "display" ]]; then
+	subAction=$2
+	clientName=$3
+
+	if [[ "$subAction" == "cert" ]]; then
+		display_client_cert "$clientName"
+		graceful_exit
+	fi
+
+	if [[ "$subAction" == "oath" ]]; then
+		display_client_oath "$clientName"
+		graceful_exit
+	fi
+	usage "display"
+	loud_exit
+fi
+
+if [[ "$action" == "generate" ]]; then
+	subAction=$2
+	clientName=$3
+	clientPassword=$4
+	if [[ "$subAction" == "oath" ]]; then
+		generate_oath "$clientName" "$clientPassword"
+		graceful_exit
+	fi
+
+	if [[ "$subAction" == "qr" ]]; then
+		generate_qr "$clientName"
+		graceful_exit
+	fi
+	usage "generate"
+	loud_exit
+fi
+
+if [[ "$action" == "help" ]]; then
+	help
+	graceful_exit
+fi
+
+if [[ "$action" == "list" ]]; then
+	get_all_active_clients
+	graceful_exit
+fi
+
+if [[ "$action" == "log" ]]; then
+	log_type=$2
+	message=$3
+	if [[ "$log_type" == "error" ]]; then
+		log "ERROR" "$message"
+	elif [[ "$log_type" == "info" ]]; then
+		log "INFO" "$message"
+	elif [[ "$log_type" == "warn" ]]; then
+		log "WARN" "$message"
+	elif [[ "$log_type" == "debug" ]]; then
+		log "DEBUG" "$message"
+	else
+		log "$log_type" "$message"
+	fi
+fi
+
+if [[ "$action" == "revoke" ]]; then
+	subAction=$2
+	clientName=$3
+	if [[ "$subAction" == "cert" ]]; then
+		revoke_client_cert "$clientName"
+		graceful_exit
+	fi
+
+	if [[ "$subAction" == "oath" ]]; then
+		revoke_oath "$clientName"
+		graceful_exit
+	fi
+	usage "revoke"
+	loud_exit
+fi
+
+if [[ "$action" == "status" ]]; then
+	subAction=$2
+	if [[ "$subAction" == "expired" ]]; then
+		check_for_expired_certs
+		graceful_exit
+	fi
+
+	if [[ "$subAction" == "unused" ]]; then
+		autoRevoke=$3
+		check_for_unused_certs "$autoRevoke"
+		graceful_exit
+	fi
+	usage "status"
+	loud_exit
+fi
+
+if [[ "$action" == "update" ]]; then
+	subAction=$2
+	if [[ "$subAction" == "oath" ]]; then
+		update_oath_script
+		graceful_exit
+	fi
+	usage "update"
+	loud_exit
+fi
+
+if [[ "$action" == "version" ]]; then
+	version
+	graceful_exit
+fi
+
+unknown_command "$action"

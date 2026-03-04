@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <p>// System overview and quick actions</p>
+</div>
+
+<div class="stats-row">
+  <div class="stat-box">
+    <div class="label">Active Clients</div>
+    <div class="value">{{ clients|length }}</div>
+  </div>
+  <div class="stat-box {% if not configured %}danger{% endif %}">
+    <div class="label">Server Status</div>
+    <div class="value" style="font-size:1rem;margin-top:4px" id="srv-status">
+      {% if configured %}<span class="badge badge-green"><span class="dot"></span>Configured</span>
+      {% else %}<span class="badge badge-red">Not Configured</span>{% endif %}
+    </div>
+  </div>
+  <div class="stat-box">
+    <div class="label">Auth Type</div>
+    <div class="value" style="font-size:0.9rem;margin-top:4px">
+      <span class="badge badge-yellow">{{ env.get('EASY_VPN_AUTH_TYPE', 'N/A') }}</span>
+    </div>
+  </div>
+  <div class="stat-box">
+    <div class="label">VPN Daemon</div>
+    <div class="value" style="font-size:1rem;margin-top:4px" id="daemon-status">
+      <span class="badge badge-yellow">Checking…</span>
+    </div>
+  </div>
+</div>
+
+{% if not configured %}
+<div class="card" style="border-color:#ff4d6d44">
+  <div class="card-title" style="color:var(--red)">⚠ Server Not Configured</div>
+  <p style="font-size:0.85rem;color:var(--muted);margin-bottom:16px">
+    The VPN server has not been configured yet. Run the configure steps to get started.
+  </p>
+  <a href="{{ url_for('configure') }}" class="btn btn-primary">Go to Configure →</a>
+</div>
+{% endif %}
+
+{% if configured %}
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Environment</div>
+    <table>
+      <tr><th>Key</th><th>Value</th></tr>
+      {% for k, v in env.items() %}
+      <tr><td class="text-muted">{{ k }}</td><td class="text-green">{{ v }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Quick Actions</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <a href="{{ url_for('clients') }}" class="btn btn-primary">◉ Manage Clients</a>
+      <a href="{{ url_for('status') }}" class="btn btn-ghost">▦ Check Certificate Status</a>
+      <button class="btn btn-ghost" onclick="refreshStatus()">↺ Refresh VPN Status</button>
+    </div>
+  </div>
+</div>
+
+{% if clients %}
+<div class="card">
+  <div class="card-title flex justify-between items-center">
+    <span>Active Clients ({{ clients|length }})</span>
+    <a href="{{ url_for('clients') }}" class="btn btn-ghost btn-sm">View All →</a>
+  </div>
+  <table>
+    <tr><th>#</th><th>Client Name</th><th>Actions</th></tr>
+    {% for c in clients %}
+    <tr>
+      <td class="text-muted">{{ loop.index }}</td>
+      <td class="text-green">{{ c }}</td>
+      <td>
+        <div class="flex gap-2">
+          <a href="{{ url_for('clients') }}" class="btn btn-ghost btn-sm">Manage</a>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function refreshStatus() {
+    const el = document.getElementById('daemon-status');
+    el.innerHTML = '<span class="spinner"></span>';
+    const r = await fetch('/api/openvpn/running');
+    const d = await r.json();
+    el.innerHTML = d.active
+      ? '<span class="badge badge-green"><span class="dot"></span>Running</span>'
+      : '<span class="badge badge-red">Stopped</span>';
+  }
+  refreshStatus();
+</script>
+{% endblock %}

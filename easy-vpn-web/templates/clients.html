@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Clients{% endblock %}
+
+{% block content %}
+<div class="page-header flex justify-between items-center">
+  <div>
+    <h1>VPN Clients</h1>
+    <p>// Create, view certificates, manage TOTP, and revoke access</p>
+  </div>
+  <button class="btn btn-primary" onclick="openModal('create-modal')">+ New Client</button>
+</div>
+
+{% if clients %}
+<div class="card">
+  <div class="card-title">Active Clients ({{ clients|length }})</div>
+  <table>
+    <tr>
+      <th>#</th><th>Client Name</th><th>Certificate</th><th>TOTP / OATH</th><th>QR Code</th><th>Revoke</th>
+    </tr>
+    {% for c in clients %}
+    <tr>
+      <td class="text-muted">{{ loop.index }}</td>
+      <td class="text-green">{{ c }}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="showCert('{{ c }}')">View .ovpn</button>
+      </td>
+      <td>
+        {% if env.get('EASY_VPN_AUTH_TYPE','') != 'PASSWORD_ONLY' %}
+        <button class="btn btn-ghost btn-sm" onclick="showOath('{{ c }}')">View TOTP</button>
+        {% else %}
+        <span class="text-muted" style="font-size:0.7rem">N/A (password only)</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if env.get('EASY_VPN_AUTH_TYPE','') != 'PASSWORD_ONLY' %}
+        <button class="btn btn-ghost btn-sm" onclick="showQR('{{ c }}')">Show QR</button>
+        {% else %}
+        <span class="text-muted" style="font-size:0.7rem">—</span>
+        {% endif %}
+      </td>
+      <td>
+        <button class="btn btn-danger btn-sm" onclick="confirmRevoke('{{ c }}')">Revoke</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:48px">
+  <div style="font-size:2rem;margin-bottom:12px">◉</div>
+  <p class="text-muted font-mono" style="font-size:0.82rem">No active clients. Create one to get started.</p>
+  <button class="btn btn-primary mt-4" onclick="openModal('create-modal')">+ Create First Client</button>
+</div>
+{% endif %}
+
+<!-- Create Modal -->
+<div class="modal-backdrop" id="create-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('create-modal')">✕</button>
+    <div class="modal-title">Create New Client</div>
+    <label>Client Name <span class="text-muted">(alphanumeric, dash, underscore)</span></label>
+    <input type="text" id="new-client-name" placeholder="john_doe" />
+    <label>Generate OATH / TOTP?</label>
+    <select id="new-generate-oath">
+      <option value="false">No</option>
+      <option value="true">Yes</option>
+    </select>
+    <div id="pw-row">
+      <label>Client Password <span class="text-muted">(required for PASSWORD_ONLY / BOTH auth types)</span></label>
+      <input type="password" id="new-client-password" placeholder="Leave blank for nopass" />
+    </div>
+    <div class="flex gap-2 mt-4">
+      <button class="btn btn-primary" onclick="createClient()">
+        <span id="create-btn-txt">Create Client</span>
+      </button>
+      <button class="btn btn-ghost" onclick="closeModal('create-modal')">Cancel</button>
+    </div>
+    <div id="create-output" class="code-block mt-4" style="display:none"></div>
+  </div>
+</div>
+
+<!-- View Cert Modal -->
+<div class="modal-backdrop" id="cert-modal">
+  <div class="modal" style="max-width:680px">
+    <button class="modal-close" onclick="closeModal('cert-modal')">✕</button>
+    <div class="modal-title" id="cert-modal-title">Certificate — <span id="cert-client-name"></span></div>
+    <div style="margin-bottom:12px;display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="copyCert()">Copy to Clipboard</button>
+      <button class="btn btn-ghost btn-sm" onclick="downloadCert()">Download .ovpn</button>
+    </div>
+    <div class="code-block" id="cert-content" style="max-height:480px"></div>
+  </div>
+</div>
+
+<!-- OATH Modal -->
+<div class="modal-backdrop" id="oath-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('oath-modal')">✕</button>
+    <div class="modal-title">TOTP Info — <span id="oath-client-name"></span></div>
+    <div class="code-block" id="oath-content"></div>
+  </div>
+</div>
+
+<!-- QR Modal -->
+<div class="modal-backdrop" id="qr-modal">
+  <div class="modal" style="text-align:center">
+    <button class="modal-close" onclick="closeModal('qr-modal')">✕</button>
+    <div class="modal-title">QR Code — <span id="qr-client-name"></span></div>
+    <p class="text-muted font-mono" style="font-size:0.72rem;margin-bottom:20px">Scan with your authenticator app</p>
+    <div id="qr-img-container"></div>
+    <div class="code-block mt-4" id="qr-raw" style="text-align:left"></div>
+  </div>
+</div>
+
+<!-- Revoke Modal -->
+<div class="modal-backdrop" id="revoke-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('revoke-modal')">✕</button>
+    <div class="modal-title" style="color:var(--red)">⚠ Revoke Access</div>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:20px;font-family:var(--font-mono)">
+      Revoking <strong id="revoke-client-display" style="color:var(--text)"></strong>.
+      Choose what to revoke:
+    </p>
+    <input type="hidden" id="revoke-client-id" />
+    <div class="flex gap-2">
+      <button class="btn btn-danger" onclick="doRevoke('cert')">Revoke Certificate</button>
+      <button class="btn btn-ghost" onclick="doRevoke('oath')" id="revoke-oath-btn">Revoke TOTP Only</button>
+      <button class="btn btn-ghost" onclick="closeModal('revoke-modal')">Cancel</button>
+    </div>
+    <div id="revoke-output" class="code-block mt-4" style="display:none"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let currentCertName = '', currentCertContent = '';
+
+  async function createClient() {
+    const name = document.getElementById('new-client-name').value.trim();
+    if (!name) { toast('Enter a client name', 'error'); return; }
+    const genOath = document.getElementById('new-generate-oath').value;
+    const pass = document.getElementById('new-client-password').value;
+    const btn = document.getElementById('create-btn-txt');
+    const out = document.getElementById('create-output');
+    btn.innerHTML = '<span class="spinner"></span> Creating…';
+
+    const body = new FormData();
+    body.append('client_name', name);
+    body.append('generate_oath', genOath);
+    if (pass) body.append('client_password', pass);
+
+    try {
+      const r = await fetch('/clients/create', { method: 'POST', body });
+      const d = await r.json();
+      out.style.display = 'block';
+      out.textContent = (d.stdout || '') + (d.stderr ? '\nSTDERR: ' + d.stderr : '');
+      toast(d.success ? `Client "${name}" created!` : 'Failed to create client', d.success ? 'success' : 'error');
+      if (d.success) setTimeout(() => location.reload(), 1500);
+    } catch(e) { toast('Request failed', 'error'); }
+    btn.textContent = 'Create Client';
+  }
+
+  async function showCert(name) {
+    currentCertName = name;
+    document.getElementById('cert-client-name').textContent = name;
+    document.getElementById('cert-content').textContent = 'Loading…';
+    openModal('cert-modal');
+    const r = await fetch(`/clients/${name}/cert`);
+    const d = await r.json();
+    currentCertContent = d.stdout || d.stderr || 'No data';
+    document.getElementById('cert-content').textContent = currentCertContent;
+  }
+
+  function copyCert() {
+    navigator.clipboard.writeText(currentCertContent).then(() => toast('Copied to clipboard!'));
+  }
+  function downloadCert() {
+    const a = document.createElement('a');
+    a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(currentCertContent);
+    a.download = currentCertName + '.ovpn';
+    a.click();
+  }
+
+  async function showOath(name) {
+    document.getElementById('oath-client-name').textContent = name;
+    document.getElementById('oath-content').textContent = 'Loading…';
+    openModal('oath-modal');
+    const r = await fetch(`/clients/${name}/oath`);
+    const d = await r.json();
+    document.getElementById('oath-content').textContent = d.stdout || d.stderr || d.message || 'No data';
+  }
+
+  async function showQR(name) {
+    document.getElementById('qr-client-name').textContent = name;
+    document.getElementById('qr-img-container').innerHTML = '<span class="spinner"></span>';
+    document.getElementById('qr-raw').textContent = '';
+    openModal('qr-modal');
+    const r = await fetch(`/clients/${name}/qr`);
+    const d = await r.json();
+    if (d.qr_b64) {
+      document.getElementById('qr-img-container').innerHTML =
+        `<img src="data:image/png;base64,${d.qr_b64}" style="max-width:240px;border-radius:8px;background:#fff;padding:8px" />`;
+    } else {
+      document.getElementById('qr-img-container').innerHTML = '<p class="text-muted font-mono" style="font-size:0.75rem">QR image not available</p>';
+    }
+    document.getElementById('qr-raw').textContent = d.stdout || d.stderr || '';
+  }
+
+  function confirmRevoke(name) {
+    document.getElementById('revoke-client-id').value = name;
+    document.getElementById('revoke-client-display').textContent = name;
+    document.getElementById('revoke-output').style.display = 'none';
+    openModal('revoke-modal');
+  }
+
+  async function doRevoke(type) {
+    const name = document.getElementById('revoke-client-id').value;
+    const out = document.getElementById('revoke-output');
+    const body = new FormData();
+    body.append('type', type);
+    const r = await fetch(`/clients/${name}/revoke`, { method: 'POST', body });
+    const d = await r.json();
+    out.style.display = 'block';
+    out.textContent = d.stdout || d.stderr || (d.success ? 'Done.' : 'Failed.');
+    toast(d.success ? `Revoked (${type}) for ${name}` : 'Revoke failed', d.success ? 'success' : 'error');
+    if (d.success) setTimeout(() => location.reload(), 1500);
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  easy-vpn-web:
+    build:
+      context: ..          # build context is the project root so Dockerfile can
+      dockerfile: easy-vpn-web/Dockerfile   # see both easy-vpn-clt/ and easy-vpn-web/
+    container_name: easy-vpn-web
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # CHANGE THESE before starting — do not leave defaults in production
+      - FLASK_SECRET_KEY=change-me-to-a-long-random-string
+      - ADMIN_PASSWORD=changeme
+    volumes:
+      # Persist OpenVPN state, PKI, and logs outside the container so they
+      # survive rebuilds. On first run these will be empty — that's expected.
+      - openvpn_config:/etc/openvpn
+      - openvpn_logs:/var/log/openvpn
+      - easyrsa_pki:/opt/easy-vpn
+    # privileged + host networking required so the container can:
+    #   - manage the OpenVPN systemd service
+    #   - apply iptables/firewall rules
+    #   - bind to the VPN tun interface
+    privileged: true
+    network_mode: host
+
+volumes:
+  openvpn_config:
+  openvpn_logs:
+  easyrsa_pki:

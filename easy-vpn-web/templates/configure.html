@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Configure{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Configure Server</h1>
+  <p>// Complete all three steps in order before creating clients</p>
+</div>
+
+<!-- Step 1: Environment -->
+<div class="card">
+  <div class="card-title flex justify-between items-center">
+    <span>Step 1 — Environment Variables</span>
+    {% if configured %}<span class="badge badge-green">✓ Complete</span>{% else %}<span class="badge badge-yellow">Pending</span>{% endif %}
+  </div>
+  {% if configured %}
+  <div class="alert alert-success" style="margin-bottom:16px">✓ Environment is already configured. Re-save below to update any values.</div>
+  {% endif %}
+
+  <div class="grid-2">
+    <div>
+      <label>Issuer Name <span class="text-muted">(shown in authenticator apps)</span></label>
+      <input type="text" id="issuer" placeholder="MyCompanyVPN" value="{{ env.get('EASY_VPN_ISSUER','') }}" />
+    </div>
+    <div>
+      <label>Organization Name</label>
+      <input type="text" id="org_name" placeholder="mycompany" value="{{ env.get('ORGANIZATION_NAME','') }}" />
+    </div>
+    <div>
+      <label>Auth Type</label>
+      <select id="auth_type">
+        {% for opt in ['TOTP_ONLY','PASSWORD_ONLY','BOTH','TOTP_OR_PASSWORD'] %}
+        <option value="{{ opt }}" {% if env.get('EASY_VPN_AUTH_TYPE') == opt %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>VPN Public IP / Hostname</label>
+      <input type="text" id="public_ip" placeholder="203.0.113.10" value="{{ env.get('VPN_PUBLIC_IP','') }}" />
+    </div>
+  </div>
+
+  <button class="btn btn-primary" onclick="saveEnv()">
+    <span id="env-btn-txt">Save Environment</span>
+  </button>
+  <div id="env-output" class="code-block mt-4" style="display:none"></div>
+</div>
+
+<!-- Step 2: Server Init -->
+<div class="card">
+  <div class="card-title flex justify-between items-center">
+    <span>Step 2 — Initialize Server PKI &amp; Certificates</span>
+    {% if server_initialized %}<span class="badge badge-green">✓ Complete</span>{% else %}<span class="badge badge-yellow">Pending</span>{% endif %}
+  </div>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;font-family:var(--font-mono)">
+    Installs OpenVPN + EasyRSA, generates the PKI, signs server certificates, creates the
+    TLS key, and starts the OpenVPN service. Takes 1–3 minutes. Only needs to run once.
+  </p>
+  {% if not configured %}
+  <div class="alert alert-warning" style="margin-bottom:16px">⚠ Complete Step 1 first.</div>
+  {% endif %}
+  {% if server_initialized %}
+  <div class="alert alert-success" style="margin-bottom:16px">✓ Server has already been initialized.</div>
+  {% endif %}
+  <button class="btn btn-primary" id="srv-btn" onclick="initServer()" {% if not configured %}disabled{% endif %}>
+    <span id="srv-btn-txt">{% if server_initialized %}Re-Initialize Server{% else %}Initialize Server{% endif %}</span>
+  </button>
+  <div id="srv-output" class="code-block mt-4" style="display:none"></div>
+</div>
+
+<!-- Step 3: Firewall -->
+<div class="card">
+  <div class="card-title flex justify-between items-center">
+    <span>Step 3 — Configure Firewall &amp; IP Forwarding</span>
+    {% if firewall_configured %}<span class="badge badge-green">✓ Complete</span>{% else %}<span class="badge badge-yellow">Pending</span>{% endif %}
+  </div>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;font-family:var(--font-mono)">
+    Enables IP forwarding and sets up iptables NAT rules so VPN clients can reach the
+    internet through the Pi. Without this step clients will connect but have no network access.
+    Safe to run multiple times — it checks before adding rules.
+  </p>
+  {% if not server_initialized %}
+  <div class="alert alert-warning" style="margin-bottom:16px">⚠ Complete Step 2 first.</div>
+  {% endif %}
+  {% if firewall_configured %}
+  <div class="alert alert-success" style="margin-bottom:16px">✓ Firewall rules are already active.</div>
+  {% endif %}
+  <button class="btn btn-primary" onclick="setupFirewall()" {% if not server_initialized %}disabled{% endif %}>
+    <span id="fw-btn-txt">{% if firewall_configured %}Re-Apply Firewall Rules{% else %}Apply Firewall Rules{% endif %}</span>
+  </button>
+  <div id="fw-output" class="code-block mt-4" style="display:none"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function saveEnv() {
+    const btn = document.getElementById('env-btn-txt');
+    const out = document.getElementById('env-output');
+    btn.innerHTML = '<span class="spinner"></span> Saving…';
+
+    const body = new FormData();
+    body.append('action', 'env');
+    body.append('issuer',    document.getElementById('issuer').value);
+    body.append('auth_type', document.getElementById('auth_type').value);
+    body.append('org_name',  document.getElementById('org_name').value);
+    body.append('public_ip', document.getElementById('public_ip').value);
+
+    try {
+      const r = await fetch('/configure', { method: 'POST', body });
+      const d = await r.json();
+      out.style.display = 'block';
+      out.textContent = d.stdout || d.stderr || (d.success ? 'Saved.' : 'Failed.');
+      toast(d.success ? 'Environment saved!' : (d.stderr || 'Failed'), d.success ? 'success' : 'error');
+      if (d.success) {
+        // Unlock Step 2 button if it was disabled
+        document.getElementById('srv-btn') && document.getElementById('srv-btn').removeAttribute('disabled');
+      }
+    } catch(e) { toast('Request failed', 'error'); }
+    btn.textContent = 'Save Environment';
+  }
+
+  async function initServer() {
+    if (!confirm('Initialize the VPN server? This takes 1–3 minutes and should only be run once.')) return;
+    const btn = document.getElementById('srv-btn-txt');
+    const out = document.getElementById('srv-output');
+    btn.innerHTML = '<span class="spinner"></span> Initializing — please wait, this takes a few minutes…';
+
+    const body = new FormData();
+    body.append('action', 'server');
+
+    try {
+      const r = await fetch('/configure', { method: 'POST', body });
+      const d = await r.json();
+      out.style.display = 'block';
+      out.textContent = (d.stdout || '') + (d.stderr ? '\n\nSTDERR:\n' + d.stderr : '');
+      toast(d.success ? 'Server initialized! Now run Step 3.' : 'Init failed — check output below', d.success ? 'success' : 'error');
+      if (d.success) location.reload();
+    } catch(e) { toast('Request failed or timed out', 'error'); }
+    btn.textContent = 'Initialize Server';
+  }
+
+  async function setupFirewall() {
+    const btn = document.getElementById('fw-btn-txt');
+    const out = document.getElementById('fw-output');
+    btn.innerHTML = '<span class="spinner"></span> Applying rules…';
+
+    const body = new FormData();
+    body.append('action', 'firewall');
+
+    try {
+      const r = await fetch('/configure', { method: 'POST', body });
+      const d = await r.json();
+      out.style.display = 'block';
+      out.textContent = d.stdout || d.stderr || (d.success ? 'Done.' : 'Failed.');
+      toast(d.success ? 'Firewall configured! You\'re ready to create clients.' : 'Firewall setup failed', d.success ? 'success' : 'error');
+      if (d.success) setTimeout(() => location.reload(), 1500);
+    } catch(e) { toast('Request failed', 'error'); }
+    btn.textContent = 'Apply Firewall Rules';
+  }
+</script>
+{% endblock %}
