@@ -1,0 +1,11 @@
+Package: easy-vpn
+Version: 1.0.0.0
+Architecture: all
+Section: utils
+Priority: optional
+Depends: openvpn, easy-rsa>=3.1.7, oathtool, qrencode
+Maintainer:
+Uploaders: Gabe Prudencio <gabe.prudencio97@gmail.com>
+Changed-By: Gabe Prudencio <gabe.prudencio97@gmail.com>
+Description: Command Line Tool for OpenVPN and easyRSA
+ Command Line tool configure OpenVPN and easyRSA, as well as create, revoke and list all active VPN users.

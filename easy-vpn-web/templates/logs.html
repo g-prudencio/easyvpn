@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block title %}Logs{% endblock %}
+
+{% block head %}
+<style>
+  .log-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .log-toolbar select,
+  .log-toolbar input[type=text] {
+    margin-bottom: 0;
+    width: auto;
+    flex: 1;
+    min-width: 140px;
+  }
+  .log-toolbar input[type=text] { max-width: 260px; }
+  .log-meta {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .log-viewer {
+    background: #060709;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 0.73rem;
+    line-height: 1.75;
+    color: #8899aa;
+    height: 560px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    position: relative;
+  }
+  .log-viewer .line { display: block; }
+  /* Colour-code by severity */
+  .log-viewer .line-error  { color: var(--red); }
+  .log-viewer .line-warn   { color: var(--yellow); }
+  .log-viewer .line-info   { color: #8899aa; }
+  .log-viewer .line-conn   { color: var(--green); }
+  .log-viewer .line-disc   { color: #aaa; }
+
+  .log-viewer .hl { background: #ffd16633; border-radius: 2px; }
+
+  .tail-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .tail-toggle input { width: auto; margin: 0; cursor: pointer; }
+  .tail-toggle.active { color: var(--green); }
+
+  #log-empty {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-align: center;
+    pointer-events: none;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header flex justify-between items-center">
+  <div>
+    <h1>Logs</h1>
+    <p>// View, search, and download server log files</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="log-toolbar">
+    <select id="log-select" onchange="loadLog()">
+      {% for name in log_files %}
+      <option value="{{ name }}">{{ name }}.log</option>
+      {% endfor %}
+    </select>
+
+    <input type="text" id="log-search" placeholder="Search logs…" oninput="onSearch()" />
+
+    <select id="log-tail" onchange="loadLog()">
+      <option value="100">Last 100 lines</option>
+      <option value="200" selected>Last 200 lines</option>
+      <option value="500">Last 500 lines</option>
+      <option value="1000">Last 1000 lines</option>
+    </select>
+
+    <label class="tail-toggle" id="tail-label" title="Auto-refresh every 5 seconds">
+      <input type="checkbox" id="tail-follow" onchange="toggleTail()" />
+      Live tail
+    </label>
+
+    <button class="btn btn-ghost btn-sm" onclick="loadLog()">↺ Refresh</button>
+    <button class="btn btn-ghost btn-sm" onclick="downloadLog()">↓ Download</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearViewer()">✕ Clear</button>
+  </div>
+
+  <div class="log-meta">
+    <span>File: <span id="meta-path" class="text-green">—</span></span>
+    <span>Size: <span id="meta-size">—</span></span>
+    <span>Showing: <span id="meta-showing">—</span></span>
+    <span>Matches: <span id="meta-matches">—</span></span>
+  </div>
+
+  <div class="log-viewer" id="log-viewer">
+    <span id="log-empty">Select a log file to view</span>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let allLines = [];
+  let tailTimer = null;
+  let currentSearch = '';
+
+  function formatBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+    return (b/1024/1024).toFixed(2) + ' MB';
+  }
+
+  function classifyLine(line) {
+    const l = line.toLowerCase();
+    if (l.includes('error') || l.includes('fatal') || l.includes('✘')) return 'line-error';
+    if (l.includes('warn') || l.includes('⚠'))                          return 'line-warn';
+    if (l.includes('connected at'))                                       return 'line-conn';
+    if (l.includes('disconnected at'))                                    return 'line-disc';
+    return 'line-info';
+  }
+
+  function highlight(text, search) {
+    if (!search) return escHtml(text);
+    const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return escHtml(text).replace(new RegExp(escaped, 'gi'),
+      m => `<span class="hl">${m}</span>`);
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderLines(lines, search) {
+    const viewer = document.getElementById('log-viewer');
+    const empty  = document.getElementById('log-empty');
+    if (!lines.length) {
+      viewer.innerHTML = '';
+      empty.style.display = 'block';
+      empty.textContent = search ? 'No lines match your search.' : 'Log file is empty.';
+      return;
+    }
+    empty.style.display = 'none';
+    viewer.innerHTML = lines.map(l =>
+      `<span class="line ${classifyLine(l)}">${highlight(l, search)}</span>`
+    ).join('\n');
+    viewer.scrollTop = viewer.scrollHeight;
+  }
+
+  function onSearch() {
+    currentSearch = document.getElementById('log-search').value.toLowerCase();
+    const filtered = currentSearch
+      ? allLines.filter(l => l.toLowerCase().includes(currentSearch))
+      : allLines;
+    document.getElementById('meta-matches').textContent =
+      currentSearch ? filtered.length + ' lines' : '—';
+    renderLines(filtered, currentSearch);
+  }
+
+  async function loadLog(silent = false) {
+    const logName = document.getElementById('log-select').value;
+    const tail    = document.getElementById('log-tail').value;
+    const search  = document.getElementById('log-search').value;
+
+    if (!silent) {
+      document.getElementById('log-viewer').innerHTML =
+        '<span style="color:var(--muted)">Loading…</span>';
+    }
+
+    try {
+      const params = new URLSearchParams({ tail });
+      if (search) params.set('search', search);
+      const r = await fetch(`/api/logs/${logName}?${params}`);
+      const d = await r.json();
+
+      if (!d.success) {
+        document.getElementById('log-viewer').textContent =
+          d.message || 'Failed to load log.';
+        return;
+      }
+
+      allLines = d.lines || [];
+      currentSearch = search.toLowerCase();
+      const filtered = currentSearch
+        ? allLines.filter(l => l.toLowerCase().includes(currentSearch))
+        : allLines;
+
+      document.getElementById('meta-path').textContent     = d.path || '—';
+      document.getElementById('meta-size').textContent     = formatBytes(d.size || 0);
+      document.getElementById('meta-showing').textContent  = `${allLines.length} / ${d.total} lines`;
+      document.getElementById('meta-matches').textContent  =
+        currentSearch ? filtered.length + ' lines' : '—';
+
+      renderLines(filtered, currentSearch);
+    } catch(e) {
+      if (!silent) toast('Failed to load log', 'error');
+    }
+  }
+
+  function clearViewer() {
+    allLines = [];
+    document.getElementById('log-viewer').innerHTML = '';
+    document.getElementById('log-empty').style.display = 'block';
+    document.getElementById('log-empty').textContent = 'Cleared.';
+    document.getElementById('meta-path').textContent    = '—';
+    document.getElementById('meta-size').textContent    = '—';
+    document.getElementById('meta-showing').textContent = '—';
+    document.getElementById('meta-matches').textContent = '—';
+  }
+
+  function toggleTail() {
+    const cb    = document.getElementById('tail-follow');
+    const label = document.getElementById('tail-label');
+    if (cb.checked) {
+      label.classList.add('active');
+      tailTimer = setInterval(() => loadLog(true), 5000);
+    } else {
+      label.classList.remove('active');
+      clearInterval(tailTimer);
+      tailTimer = null;
+    }
+  }
+
+  function downloadLog() {
+    const logName = document.getElementById('log-select').value;
+    window.location.href = `/api/logs/${logName}/download`;
+  }
+
+  // Load default log on page open
+  loadLog();
+</script>
+{% endblock %}

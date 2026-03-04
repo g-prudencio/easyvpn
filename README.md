@@ -24,7 +24,7 @@ EasyVPN consists of two components:
 │   ├── DEBIAN/
 │   │   ├── control                     # Package metadata and dependencies
 │   │   └── postinst                    # Post-install script
-│   ├── opt/rook/easy-vpn/
+│   ├── opt/easy-vpn/
 │   │   ├── client/
 │   │   │   └── base-template.conf      # Base OpenVPN client config template
 │   │   ├── functions/
@@ -253,3 +253,17 @@ Your PKI and client data are safe — they live in Docker volumes, not the conta
 - The web UI uses a single shared admin password. It is not designed for multi-user access.
 - The web app must run as a privileged container (`privileged: true`) because it needs to manage OpenVPN, apply iptables rules, and access the tun interface. Do not expose port 5000 to the public internet — place it behind a firewall or VPN.
 - Firewall rules applied through the web UI (Step 3) are written to `/etc/iptables/rules.v4` inside the container. Because the container uses `network_mode: host`, these rules apply to the host directly and persist across container restarts. They will not survive a full server reboot unless `iptables-restore` is configured on the host.
+
+---
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy and a full list of security considerations for deployment.
+
+---
+
+## Authors
+
+**Gabe Prudencio**
+
+See [CONTRIBUTORS](CONTRIBUTORS) for full contributor details.
