@@ -14,8 +14,6 @@ Report security issues directly to the maintainer:
 
 - **Gabe Prudencio**
 
-We aim to respond within 48 hours and will work with you to understand the scope and issue a fix as quickly as possible.
-
 ## Security Considerations for Deployment
 
 ### Web UI
